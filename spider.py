@@ -1,12 +1,23 @@
-import scrapy
-import logging
-import MySQLdb
 from scrapy.exceptions import CloseSpider
 
-db = MySQLdb.connect(host="localhost",    # your host, usually localhost
-                     user="root",         # your username
-                     passwd="111111",  # your password
-                     db="scrappy")
+import scrapy
+import logging
+
+# install
+# sudo apt-get install unixodbc-dev
+# https://blogs.msdn.microsoft.com/sqlnativeclient/2016/10/20/odbc-driver-13-0-for-linux-released/
+
+import pyodbc
+cnxn = pyodbc.connect('DRIVER={ODBC Driver 13 for SQL Server};SERVER=81.2.234.35;DATABASE=DataEntryDatabase;UID=scraper;PWD=123456Ab.')
+cursor = cnxn.cursor()
+cursor.execute("select user_id, user_name from users")
+rows = cursor.fetchall()
+
+#
+# from sqlalchemy import create_engine
+# engine = create_engine("mssql+pyodbc://scraper:123456Ab.@81.2.234.35/DataEntryDatabase?driver=Microsoft+ODBC+Driver+13")
+# for row in engine.execute("select user_id, user_name from users"):
+#     print row.user_id, row.user_name
 
 cur = db.cursor()
 root_url = 'https://www.yellowpages.com'
