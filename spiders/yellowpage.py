@@ -1,17 +1,10 @@
-from scrapy.exceptions import CloseSpider
+import logging
 
 import scrapy
-import logging
-from us_states import states_list
-# install
-# sudo apt-get install unixodbc-dev
-# pip install pyodbc
-# pip install sqlalchemy
-# https://blogs.msdn.microsoft.com/sqlnativeclient/2016/10/20/odbc-driver-13-0-for-linux-released/
 
-import pyodbc
-cnxn = pyodbc.connect('DRIVER={ODBC Driver 13 for SQL Server};SERVER=81.2.234.35;DATABASE=DataEntryDb;UID=dataentry;PWD=entrz@01')
-cursor = cnxn.cursor()
+from data.us_states import states_list
+from commons.connect import DBConnect
+
 
 root_url = 'https://www.yellowpages.com'
 
@@ -19,8 +12,11 @@ root_url = 'https://www.yellowpages.com'
 class YellowPageSpider(scrapy.Spider):
 
     name = 'yellow page spider'
+    connect = None
 
-    def __init__(self, search='', page_limit=1, *args, **kwargs):
+    def __init__(self, search='', page_limit=200, *args, **kwargs):
+        self.connect = DBConnect()
+
         super(YellowPageSpider, self).__init__(*args, **kwargs)
 
         self.start_urls = []
@@ -38,17 +34,17 @@ class YellowPageSpider(scrapy.Spider):
                 if page > page_limit:
                     loop = False
 
-            logging.info(self.start_urls)
+        logging.info(self.start_urls)
 
     # logging.info(start_urls)
 
     def parse(self, response):
 
         container = response.css('div.organic .v-card')
-
-        if len(container) == 0:
-            # exit if end of page
-            raise CloseSpider('End of Page')
+        #
+        # if len(container) == 0:
+        #     # exit if end of page
+        #     raise CloseSpider('End of Page')
 
         for dom in container:
             vcard = {}
@@ -61,7 +57,7 @@ class YellowPageSpider(scrapy.Spider):
                 continue
 
             vcard['scraping_source_id'] = "YP-" + str(_id)
-            result = cursor.execute("SELECT SyncGUID from ScrapedCompany WHERE SyncGUID='%s'" % vcard.get('scraping_source_id'))
+            result = self.connect.cursor.execute("SELECT SyncGUID from ScrapedCompany WHERE SyncGUID='%s'" % vcard.get('scraping_source_id'))
             result = result.fetchall()
             logging.info(result)
 
@@ -91,10 +87,13 @@ class YellowPageSpider(scrapy.Spider):
                 vcard['link'] = link
 
                 vcard['email'] = ''
-                vcard['number_of_employees'] = 3
+                vcard['website'] = ''
+                vcard['number_of_employees'] = 1
                 vcard['is_importable'] = ''
+                vcard['country_id'] = 1
+                vcard['data_source'] = 1
 
-                insert_data(vcard)
+                self.connect.insert_data(vcard)
                 yield scrapy.http.Request(link, callback=self.get_email)
 
     def get_email(self, response):
@@ -113,33 +112,7 @@ class YellowPageSpider(scrapy.Spider):
             sql = "UPDATE ScrapedCompany SET CompanyEmail='%s', CompanyWebsite='%s' WHERE SyncGUID='%s'"\
                   % (email, website, scraping_source_id)
             logging.info(sql)
-            cursor.execute(sql)
-            cnxn.commit()
+            self.connect.cursor.execute(sql)
+            self.connect.conn.commit()
 
 
-def insert_data(vcard):
-
-    sql = "INSERT INTO ScrapedCompany " \
-          "(CompanyPhone, CompanyAddress, CompanyName, CompanyEmail, CompanyLogoUrl, NumberOfEmployees, " \
-          "ScrapingSourceID, IsImportable, CompanyWebsite, CountryID, SyncGUID, IndustryFocuses, SourceUrl) " \
-          "VALUES ('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s');" % (
-            vcard.get('phone'),
-            vcard.get('address'),
-            vcard.get('company'),
-            vcard.get('email'),
-            vcard.get('logo_url'),
-            vcard.get('number_of_employees'),
-            1,
-            vcard.get('is_importable'),
-            '',
-            1,
-            vcard.get('scraping_source_id'),
-            vcard.get('industry_focus'),
-            vcard.get('link')
-          )
-    logging.info(sql)
-    try:
-        cursor.execute(sql)
-        cnxn.commit()
-    except Exception as e:
-        pass

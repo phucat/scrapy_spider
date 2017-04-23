@@ -1,0 +1,95 @@
+import logging
+
+import scrapy
+from scrapy.exceptions import CloseSpider
+from commons.connect import DBConnect
+
+from data.uk_cities import uk_city_list
+
+root_url = 'https://www.yell.com'
+
+
+class YellSpider(scrapy.Spider):
+
+    name = 'Yell spider'
+    connect = None
+
+    custom_settings = {
+        'CONCURRENT_ITEMS': 1,
+        'CONCURRENT_REQUESTS': 1,
+        'DOWNLOAD_DELAY': 5,
+        'AUTOTHROTTLE_ENABLED': False,
+        'USER_AGENT': "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/57.0.2987.133 Safari/537.36",
+        'RANDOMIZE_DOWNLOAD_DELAY': True
+    }
+
+    def __init__(self, search='', *args, **kwargs):
+        self.connect = DBConnect()
+
+        super(YellSpider, self).__init__(*args, **kwargs)
+
+        self.start_urls = []
+        # url = '%s/ucs/UcsSearchAction.do?keywords=%s&location=%s' % (root_url, search, "Witham")
+        # self.start_urls.append(url)
+
+        states = uk_city_list.split("\n")
+        for location in states:
+            if location == "":
+                continue
+            url = '%s/ucs/UcsSearchAction.do?keywords=%s&location=%s' % (root_url, search, location)
+            self.start_urls.append(url)
+
+        logging.info(self.start_urls)
+
+    def parse(self, response):
+
+        for setting in self.settings:
+            logging.info(setting + " : " + str(self.settings.get(setting)))
+
+        container = response.css('div.businessCapsule')
+
+        for dom in container:
+
+            link = dom.css('div div a').xpath('@href').extract_first()
+            logging.info(link)
+            yield scrapy.http.Request(root_url + link, callback=self.get_content)
+
+    def get_content(self, response):
+
+        url_split = response.request.url.split('-')
+        data_id = "YL-" + str(url_split[len(url_split) - 1].split('/')[0])
+        capsule = response.css("div.businessCapsule")
+
+        vcard = dict()
+        vcard['scraping_source_id'] = data_id
+        exist = self.connect.is_exist(data_id)
+        logging.info(exist)
+
+        if not exist:
+
+            vcard['company'] = capsule.css('div div div h1 ::text').extract_first()
+            addreses = capsule.css('p.address span ::text').extract()
+            addr = ''
+            for a in addreses:
+                addr += addr + a + ", "
+            vcard['address'] = addr
+            vcard['phone'] = capsule.css('.business-telephone ::text').extract_first().replace('\n', "")
+            industry = response.css('ol.breadcrumbs ::text').extract()
+            vcard['industry_focus'] = industry[14]
+            logo_url = capsule.css('div.businessCapsule--logo img').xpath("@src").extract_first()
+            vcard['logo_url'] = root_url + logo_url
+            vcard['link'] = response.request.url
+
+            containers = response.css('div.businessCapsule--callToAction a').xpath("@href").extract()
+            logging.info(containers)
+
+            vcard['website'] = containers[0] if len(containers) > 0 else ''
+            vcard['email'] = containers[1] if len(containers) > 1 else ''
+            vcard['number_of_employees'] = 1
+            vcard['is_importable'] = ''
+            vcard['country_id'] = 2
+            vcard['data_source'] = 1
+
+            self.connect.insert_data(vcard)
+            logging.info(vcard)
+
