@@ -7,6 +7,7 @@ from commons.connect import DBConnect
 
 
 root_url = 'https://www.yellowpages.com'
+TOTAL_PAGES = 0
 
 
 class YellowPageSpider(scrapy.Spider):
@@ -14,7 +15,7 @@ class YellowPageSpider(scrapy.Spider):
     name = 'yellow page spider'
     connect = None
 
-    def __init__(self, search='', page_limit=200, *args, **kwargs):
+    def __init__(self, search='', *args, **kwargs):
         self.connect = DBConnect()
 
         super(YellowPageSpider, self).__init__(*args, **kwargs)
@@ -24,28 +25,14 @@ class YellowPageSpider(scrapy.Spider):
         for location in states:
             if location == "":
                 continue
-            page = 0
-            loop = True
-            while loop:
-                initial_url = '%s/search?search_terms=%s&geo_location_terms=%s' % (root_url, search, location)
-                url = initial_url if page == 0 else initial_url + "&page=" + str(page)
-                self.start_urls.append(url)
-                page += 1
-                if page > page_limit:
-                    loop = False
+            url = '%s/search?search_terms=%s&geo_location_terms=%s' % (root_url, search, location)
+            self.start_urls.append(url)
 
         logging.info(self.start_urls)
-
-    # logging.info(start_urls)
 
     def parse(self, response):
 
         container = response.css('div.organic .v-card')
-        #
-        # if len(container) == 0:
-        #     # exit if end of page
-        #     raise CloseSpider('End of Page')
-
         for dom in container:
             vcard = {}
 
@@ -61,58 +48,45 @@ class YellowPageSpider(scrapy.Spider):
             result = result.fetchall()
             logging.info(result)
 
+            link = root_url + dom.css('.business-name').xpath('@href').extract_first()
+
             if len(result) == 0:
+                yield scrapy.http.Request(link, callback=self.get_content)
 
-                company = dom.css('.info h2 a ::text').extract_first()
-                vcard['company'] = company
+        next_page = response.css('a.next.ajax-page').xpath("@href").extract_first()
+        if next_page is not None:
+            logging.info("---------------------")
+            logging.info(next_page)
+            logging.info("---------------------")
+            yield scrapy.http.Request(root_url + next_page)
 
-                address = dom.css('.adr ::text').extract()
-                adr = ''
-                for a in address:
-                    adr = adr + a + " "
-                vcard['address'] = adr
+    def get_content(self, response):
 
-                phone = dom.css('.phone ::text').extract_first()
-                vcard['phone'] = phone
-
-                categories = dom.css('.categories ::text').extract()
-                industry = ''
-                for c in categories:
-                    industry = industry + c + ", "
-                vcard['industry_focus'] = industry
-
-                vcard['logo_url'] = dom.css('.media-thumbnail a img').xpath('@src').extract_first()
-
-                link = root_url + dom.css('.business-name').xpath('@href').extract_first()
-                vcard['link'] = link
-
-                vcard['email'] = ''
-                vcard['website'] = ''
-                vcard['number_of_employees'] = 1
-                vcard['is_importable'] = ''
-                vcard['country_id'] = 1
-                vcard['data_source'] = 1
-
-                self.connect.insert_data(vcard)
-                yield scrapy.http.Request(link, callback=self.get_email)
-
-    def get_email(self, response):
+        vcard = dict()
         scraping_source_id = "YP-" + (response.request.url.split('lid=')[1])
-        logging.info(scraping_source_id)
-        email = response.css('.email-business').xpath('@href').extract_first()
-        email = None if email is None else email.split('mailto:')[1]
-        website = response.css('.website-link').xpath('@href').extract_first()
+        vcard['scraping_source_id'] = scraping_source_id
 
-        logging.info("----------------------")
-        logging.info(email)
-        logging.info(website)
-        logging.info("----------------------")
+        vcard['company'] = response.css('header article div.sales-info h1 ::text').extract_first()
+        addresses = response.css('div.contact p.address span ::text').extract()
+        addr = ''
+        for a in addresses:
+            addr = addr + a
+        vcard['address'] = addr
+        vcard['phone'] = response.css('p.phone ::text').extract_first()
+        categories = response.css('dd.categories span a ::text').extract()
+        cs = ''
+        for c in categories:
+            cs = cs + c + ", "
+        vcard['industry_focus'] = cs
+        vcard['logo_url'] = response.css('#business-info dl dd.logo img').xpath('@src').extract_first()
+        vcard['link'] = response.request.url
+        mailto = response.css('a.email-business').xpath("@href").extract_first()
+        vcard['email'] = '' if mailto is None else mailto.split('mailto:')[1]
+        vcard['website'] = response.css('#main-header div a.website-link').xpath('@href').extract_first()
+        vcard['number_of_employees'] = 1
+        vcard['is_importable'] = ''
+        vcard['country_id'] = 1
+        vcard['data_source'] = 1
 
-        if email is not None or website is not None:
-            sql = "UPDATE ScrapedCompany SET CompanyEmail='%s', CompanyWebsite='%s' WHERE SyncGUID='%s'"\
-                  % (email, website, scraping_source_id)
-            logging.info(sql)
-            self.connect.cursor.execute(sql)
-            self.connect.conn.commit()
-
-
+        logging.info(vcard)
+        self.connect.insert_data(vcard)
