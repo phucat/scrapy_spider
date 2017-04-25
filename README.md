@@ -1,8 +1,9 @@
 RUN the following commands:
 
 ```sh
-sudo apt-get install python-dev
+sudo apt-get install build-essential libssl-dev libffi-dev python-dev
 pip install scrapy
+pip install retry
 
 cd spiders
 scrapy runspider yell.py -a search="Information Technology"

@@ -22,8 +22,8 @@ class DBConnect(object):
               "ScrapingSourceID, IsImportable, CompanyWebsite, CountryID, SyncGUID, IndustryFocuses, SourceUrl) " \
               "VALUES ('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s');" % (
                 vcard.get('phone'),
-                vcard.get('address'),
-                vcard.get('company'),
+                vcard.get('address').replace("'", ""),
+                vcard.get('company').replace("'", ""),
                 vcard.get('email'),
                 vcard.get('logo_url'),
                 vcard.get('number_of_employees'),
