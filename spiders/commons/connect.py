@@ -7,6 +7,7 @@ import pyodbc
 # https://blogs.msdn.microsoft.com/sqlnativeclient/2016/10/20/odbc-driver-13-0-for-linux-released/
 import logging
 
+import datetime
 from retry import retry
 
 
@@ -32,12 +33,14 @@ class DBConnect(object):
     def insert_data(self, vcard):
 
         sql = "INSERT INTO ScrapedCompany " \
-              "(CompanyPhone, CompanyAddress, CompanyName, CompanyEmail, CompanyLogoUrl, NumberOfEmployees, " \
+              "(CreatedDate, CreatedBy, CompanyPhone, CompanyAddress, CompanyName, CompanyEmail, CompanyLogoUrl, NumberOfEmployees, " \
               "ScrapingSourceID, IsImportable, CompanyWebsite, CountryID, SyncGUID, IndustryFocuses, SourceUrl) " \
-              "VALUES ('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s');" % (
+              "VALUES ('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s');" % (
+                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                11,
                 vcard.get('phone'),
-                vcard.get('address').replace("'", ""),
-                vcard.get('company').replace("'", ""),
+                vcard.get('address').replace("'", "") if vcard.get('address') is not None else None,
+                vcard.get('company').replace("'", "") if vcard.get('company') is not None else None,
                 vcard.get('email'),
                 vcard.get('logo_url'),
                 vcard.get('number_of_employees'),

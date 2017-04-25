@@ -73,20 +73,19 @@ class YellSpider(scrapy.Spider):
         vcard = dict()
         vcard['scraping_source_id'] = data_id
         exist = self.connect.is_exist(data_id)
-        logging.info(exist)
 
         if not exist:
 
-            vcard['company'] = capsule.css('div div div h1 ::text').extract_first()
+            vcard['company'] = response.css('h1.businessCapsule--title ::text').extract_first()
             addreses = capsule.css('p.address span ::text').extract()
             addr = ''
             for a in addreses:
                 addr += addr + a + ", "
             vcard['address'] = addr
-            phone = capsule.css('.business-telephone ::text').extract_first()
+            phone = response.css('.business-telephone ::text').extract_first()
             vcard['phone'] = None if phone is None else phone.replace('\n', "")
             industry = response.css('ol.breadcrumbs ::text').extract()
-            vcard['industry_focus'] = industry[14]
+            vcard['industry_focus'] = industry[14] if len(industry) > 0 else None
             logo_url = capsule.css('div.businessCapsule--logo img').xpath("@src").extract_first()
             vcard['logo_url'] = root_url + logo_url if logo_url is not None else None
             vcard['link'] = response.request.url
