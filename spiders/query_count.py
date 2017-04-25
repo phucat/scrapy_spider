@@ -61,7 +61,7 @@ for s in states:
     if s == "":
         continue
 
-    sql = "SELECT count(CompanyAddress) as count FROM ScrapedCompany WHERE CompanyAddress LIKE '% " + s + " %';"
+    sql = "SELECT count(CompanyAddress) as count FROM ScrapedCompany WHERE CompanyAddress LIKE '% " + s + " %' AND ScrapingSourceID=1;"
     result = connect.cursor.execute(sql)
 
     total = result.fetchall()[0][0]

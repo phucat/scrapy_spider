@@ -7,13 +7,27 @@ import pyodbc
 # https://blogs.msdn.microsoft.com/sqlnativeclient/2016/10/20/odbc-driver-13-0-for-linux-released/
 import logging
 
+from retry import retry
+
+
+class DBErrorException(Exception):
+    pass
+
+
+server = '81.2.234.35'
+database = 'DataEntryDb'
+username = 'dataentry'
+password = 'entrz@01'
+
 
 class DBConnect(object):
 
     def __init__(self):
 
-        self.conn = pyodbc.connect('DRIVER={ODBC Driver 13 for SQL Server};SERVER=81.2.234.35;DATABASE=DataEntryDb;UID=dataentry;PWD=entrz@01')
+        self.conn = pyodbc.connect('DRIVER={ODBC Driver 13 for SQL Server};SERVER=%s;DATABASE=%s;UID=%s;PWD=%s'
+                                   % (server, database, username, password))
         self.cursor = self.conn.cursor()
+
 
     def insert_data(self, vcard):
 
@@ -48,6 +62,7 @@ class DBConnect(object):
         except Exception as e:
             logging.info("####### ERROR!! ########")
             logging.error(e)
+            error_code = e[0]
 
     def is_exist(self, source_id):
         result = self.cursor.execute(

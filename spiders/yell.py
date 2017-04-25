@@ -6,6 +6,7 @@ from commons.connect import DBConnect
 
 from data.uk_cities import uk_city_list
 
+
 root_url = 'https://www.yell.com'
 
 
@@ -15,12 +16,17 @@ class YellSpider(scrapy.Spider):
     connect = None
 
     custom_settings = {
-        'CONCURRENT_ITEMS': 1,
-        'CONCURRENT_REQUESTS': 1,
-        'DOWNLOAD_DELAY': 5,
+        'CONCURRENT_ITEMS': 5,
+        'CONCURRENT_REQUESTS': 5,
+        'DOWNLOAD_DELAY': 2,
         'AUTOTHROTTLE_ENABLED': False,
-        'USER_AGENT': "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/57.0.2987.133 Safari/537.36",
-        'RANDOMIZE_DOWNLOAD_DELAY': True
+        'RANDOMIZE_DOWNLOAD_DELAY': True,
+        'HTTP_PROXY': 'http://127.0.0.1:8123',
+        'DOWNLOADER_MIDDLEWARES': {
+             'middlewares.RandomUserAgentMiddleware': 400,
+             'middlewares.ProxyMiddleware': 410,
+             'scrapy.contrib.downloadermiddleware.useragent.UserAgentMiddleware': None
+        }
     }
 
     def __init__(self, search='', *args, **kwargs):
@@ -54,6 +60,10 @@ class YellSpider(scrapy.Spider):
             logging.info(link)
             yield scrapy.http.Request(root_url + link, callback=self.get_content)
 
+        next_page = response.css('.pagination--next').xpath('@href').extract_first()
+        if next_page is not None:
+            yield scrapy.http.Request(root_url + link, callback=self.get_content)
+
     def get_content(self, response):
 
         url_split = response.request.url.split('-')
@@ -73,11 +83,12 @@ class YellSpider(scrapy.Spider):
             for a in addreses:
                 addr += addr + a + ", "
             vcard['address'] = addr
-            vcard['phone'] = capsule.css('.business-telephone ::text').extract_first().replace('\n', "")
+            phone = capsule.css('.business-telephone ::text').extract_first()
+            vcard['phone'] = None if phone is None else phone.replace('\n', "")
             industry = response.css('ol.breadcrumbs ::text').extract()
             vcard['industry_focus'] = industry[14]
             logo_url = capsule.css('div.businessCapsule--logo img').xpath("@src").extract_first()
-            vcard['logo_url'] = root_url + logo_url
+            vcard['logo_url'] = root_url + logo_url if logo_url is not None else None
             vcard['link'] = response.request.url
 
             containers = response.css('div.businessCapsule--callToAction a').xpath("@href").extract()
@@ -88,7 +99,7 @@ class YellSpider(scrapy.Spider):
             vcard['number_of_employees'] = 1
             vcard['is_importable'] = ''
             vcard['country_id'] = 2
-            vcard['data_source'] = 1
+            vcard['data_source'] = 2
 
             self.connect.insert_data(vcard)
             logging.info(vcard)
