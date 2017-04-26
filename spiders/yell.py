@@ -1,7 +1,6 @@
 import logging
 
 import scrapy
-from scrapy.exceptions import CloseSpider
 from commons.connect import DBConnect
 
 from data.uk_cities import uk_city_list
@@ -16,17 +15,21 @@ class YellSpider(scrapy.Spider):
     connect = None
 
     custom_settings = {
-        'CONCURRENT_ITEMS': 5,
         'CONCURRENT_REQUESTS': 5,
-        'DOWNLOAD_DELAY': 2,
+        'DOWNLOAD_DELAY': 5,
         'AUTOTHROTTLE_ENABLED': False,
         'RANDOMIZE_DOWNLOAD_DELAY': True,
         'HTTP_PROXY': 'http://127.0.0.1:8123',
-        'DOWNLOADER_MIDDLEWARES': {
-             'middlewares.RandomUserAgentMiddleware': 400,
-             'middlewares.ProxyMiddleware': 410,
-             'scrapy.contrib.downloadermiddleware.useragent.UserAgentMiddleware': None
-        }
+        'ROBOTSTXT_OBEY': False,
+        'COOKIES_ENABLED': True,
+        'COOKIES_DEBUG': True,
+        'RETRY_TIMES': 20,
+        'RETRY_HTTP_CODES': [500, 502, 503, 504, 408, 403],
+        # 'DOWNLOADER_MIDDLEWARES': {
+        #      'middlewares.RandomUserAgentMiddleware': 400,
+        #      'middlewares.ProxyMiddleware': 410,
+        #      'scrapy.contrib.downloadermiddleware.useragent.UserAgentMiddleware': None
+        # }
     }
 
     def __init__(self, search='', *args, **kwargs):
@@ -35,7 +38,7 @@ class YellSpider(scrapy.Spider):
         super(YellSpider, self).__init__(*args, **kwargs)
 
         self.start_urls = []
-        # url = '%s/ucs/UcsSearchAction.do?keywords=%s&location=%s' % (root_url, search, "Witham")
+        # url = '%s/ucs/UcsSearchAction.do?keywords=%s&location=%s&scrambleSeed=420366096' % (root_url, search, "Braintree")
         # self.start_urls.append(url)
 
         states = uk_city_list.split("\n")
@@ -48,10 +51,11 @@ class YellSpider(scrapy.Spider):
         logging.info(self.start_urls)
 
     def parse(self, response):
+        #
+        # for setting in self.settings:
+        #     logging.info(setting + " : " + str(self.settings.get(setting)))
 
-        for setting in self.settings:
-            logging.info(setting + " : " + str(self.settings.get(setting)))
-
+        #yield scrapy.http.Request('https://www.yell.com/biz/fix-it-up-blackwood-901448702/', callback=self.get_content)
         container = response.css('div.businessCapsule')
 
         for dom in container:
@@ -61,8 +65,12 @@ class YellSpider(scrapy.Spider):
             yield scrapy.http.Request(root_url + link, callback=self.get_content)
 
         next_page = response.css('.pagination--next').xpath('@href').extract_first()
+
         if next_page is not None:
-            yield scrapy.http.Request(root_url + link, callback=self.get_content)
+            logging.info("--------nextpage----------")
+            n = root_url + next_page
+            logging.info(n)
+            yield scrapy.http.Request(n)
 
     def get_content(self, response):
 
@@ -76,7 +84,9 @@ class YellSpider(scrapy.Spider):
 
         if not exist:
 
-            vcard['company'] = response.css('h1.businessCapsule--title ::text').extract_first()
+            company = response.css('h1.businessCapsule--title ::text').extract_first()
+            logging.info(company)
+            vcard['company'] = company
             addreses = capsule.css('p.address span ::text').extract()
             addr = ''
             for a in addreses:
@@ -100,6 +110,11 @@ class YellSpider(scrapy.Spider):
             vcard['country_id'] = 2
             vcard['data_source'] = 2
 
-            self.connect.insert_data(vcard)
-            logging.info(vcard)
+            if company is None:
+                logging.info("---------NO COMPANY NAME ERROR-----------")
+                logging.info(vcard.get('link'))
+                logging.info("---------NO COMPANY NAME ERROR-----------")
 
+            else:
+                self.connect.insert_data(vcard)
+            logging.info(vcard)
